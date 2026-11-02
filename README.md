@@ -61,6 +61,24 @@ cd ~/lumina-guide-mono
 
 浏览器打开 `http://<JETSON_IP>:8766/`。页面无需访问码，但默认只适合可信局域网。
 
+### 安装为自动恢复服务
+
+在目标路径固定为 `/home/ubuntu/lumina-guide-mono` 的 Jetson 上：
+
+```bash
+sudo install -m 0644 deployment/lumina-guide-mono.service \
+  /etc/systemd/system/lumina-guide-mono.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now lumina-guide-mono.service
+sudo systemctl status lumina-guide-mono.service
+```
+
+查看实时终端日志：
+
+```bash
+journalctl -u lumina-guide-mono.service -f
+```
+
 摄像头设备、分辨率、模型路径和水平视场角可通过参数或环境变量调整：
 
 首次安装可创建隔离环境。Jetson 的检测使用 ONNX Runtime CPU；这是为了兼容
