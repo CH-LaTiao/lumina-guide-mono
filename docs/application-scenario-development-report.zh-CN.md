@@ -1,8 +1,11 @@
 # LUMINA Guide Mono 应用场景开发报告
 
-版本：0.2.0  
-日期：2026-11-02  
-设备：NVIDIA Jetson Orin Nano（4GB 级统一内存）  
+版本：0.2.0
+
+日期：2026-11-02
+
+设备：NVIDIA Jetson Orin Nano（4GB 级统一内存）
+
 仓库：<https://github.com/CH-LaTiao/lumina-guide-mono>
 
 ## 1. 报告范围
