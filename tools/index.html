@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LUMINA Guide Mono · 单目感知台</title>
+  <style>
+    :root {
+      --bg: #08111d; --panel: #101d2c; --panel2: #142539;
+      --line: #27415c; --text: #e8f1f8; --muted: #8ea9be;
+      --green: #51d68b; --amber: #f6b84c; --red: #ff6b6b; --blue: #69b9ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: radial-gradient(circle at 20% 0%, #18395c 0, var(--bg) 38%);
+      color: var(--text); font: 15px/1.5 system-ui, "Noto Sans CJK SC", sans-serif;
+    }
+    header { padding: 24px 28px 10px; display: flex; align-items: end; gap: 15px; flex-wrap: wrap; }
+    h1 { margin: 0; font-size: 26px; letter-spacing: .4px; }
+    .tag { color: var(--blue); border: 1px solid #315d83; padding: 4px 9px; border-radius: 99px; }
+    main { padding: 14px 28px 30px; display: grid; gap: 14px; grid-template-columns: minmax(0, 1.6fr) minmax(320px, .8fr); }
+    .card { background: linear-gradient(145deg, rgba(21,39,59,.96), rgba(11,25,40,.98)); border: 1px solid var(--line); border-radius: 15px; padding: 16px; box-shadow: 0 12px 35px rgba(0,0,0,.18); }
+    .video-card { grid-row: span 2; }
+    .frame-wrap { position: relative; overflow: hidden; background: #02070d; border-radius: 10px; aspect-ratio: 16/9; }
+    .frame { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .badge { position: absolute; top: 12px; right: 12px; padding: 6px 10px; border-radius: 8px; background: #08111dd9; font-weight: 700; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+    .stat { background: #0a1725; padding: 10px; border-radius: 9px; }
+    .stat small { color: var(--muted); display: block; }
+    .stat strong { font-size: 17px; }
+    h2 { margin: 0 0 13px; font-size: 17px; }
+    .speech { font-size: 25px; line-height: 1.35; font-weight: 750; margin: 5px 0 13px; }
+    .meta { color: var(--muted); font-size: 13px; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+    button { background: #19344e; color: var(--text); border: 1px solid #315a7b; border-radius: 9px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
+    button:hover, button.active { background: #1e7867; border-color: #43c8a6; }
+    .regions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .region { background: #091726; border: 1px solid #20364c; border-radius: 10px; padding: 11px; }
+    .region strong { display: block; font-size: 19px; }
+    .region span { color: var(--muted); font-size: 12px; }
+    .objects { max-height: 280px; overflow: auto; }
+    .object { display: grid; grid-template-columns: 1fr auto; gap: 8px; border-bottom: 1px solid #203248; padding: 9px 0; }
+    .object:last-child { border: 0; }
+    .object small { color: var(--muted); }
+    .object .distance { font-variant-numeric: tabular-nums; text-align: right; }
+    .calibrate { display: flex; gap: 8px; }
+    input { min-width: 0; flex: 1; padding: 10px; border-radius: 9px; border: 1px solid #315a7b; color: var(--text); background: #07121e; }
+    .safety { color: #f5cf86; background: #33260e; border: 1px solid #6a4b15; padding: 11px; border-radius: 9px; margin-top: 12px; }
+    .error { color: var(--red); }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 12px; } .video-card { grid-row: auto; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>LUMINA Guide Mono</h1>
+  <span class="tag">单目感知与近似测距</span>
+  <span class="tag" id="statusTag">正在启动</span>
+</header>
+<main>
+  <section class="card video-card">
+    <div class="frame-wrap">
+      <img class="frame" src="/stream.mjpg" alt="摄像头实时画面、识别框与建议提示">
+      <div class="badge" id="modeBadge">步行</div>
+    </div>
+    <div class="stats">
+      <div class="stat"><small>摄像头</small><strong id="camera">等待</strong></div>
+      <div class="stat"><small>采集 FPS</small><strong id="fps">0</strong></div>
+      <div class="stat"><small>检测</small><strong id="detectMs">--</strong></div>
+      <div class="stat"><small>深度</small><strong id="depthMs">--</strong></div>
+    </div>
+    <div class="safety">近似距离用于辅助理解。页面不提供安全通行许可，也不能替代白手杖和现场判断。</div>
+  </section>
+
+  <section class="card">
+    <h2>当前提示</h2>
+    <div class="speech" id="speech">正在确认环境。</div>
+    <div class="meta" id="guidanceMeta">等待感知结果</div>
+    <div class="controls" style="margin-top:14px">
+      <button data-mode="standing">站立观察</button>
+      <button data-mode="walking" class="active">步行提示</button>
+      <button data-mode="paused">暂停</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>单目分区测距</h2>
+    <div class="regions" id="regions"></div>
+    <p class="meta" id="calibrationState">相对深度尚未标定。</p>
+    <div class="calibrate">
+      <input id="referenceDistance" type="number" min="0.3" max="10" step="0.1" placeholder="已知距离（米）">
+      <button id="calibrate">记录标定</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>目标距离</h2>
+    <div class="objects" id="objects"><p class="meta">等待目标检测。</p></div>
+  </section>
+
+  <section class="card">
+    <h2>深度图</h2>
+    <img class="frame" src="/depth.jpg" alt="单目相对深度热图">
+    <p class="meta">暖色表示模型判断为更近。仅用于相对比较；未标定时不显示米数。</p>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

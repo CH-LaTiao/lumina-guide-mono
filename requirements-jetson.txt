@@ -1,0 +1,4 @@
+# ONNX Runtime CPU avoids the OpenCV 4.8 YOLO11 dynamic-Concat limit.
+numpy>=1.24,<2
+onnxruntime>=1.20,<2
+Pillow>=9,<12
