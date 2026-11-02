@@ -47,12 +47,18 @@ async function refresh() {
     $('fps').textContent = (data.camera.fps || 0).toFixed(1);
     $('detectMs').textContent = data.inference.detection_ms == null ? '--' : `${data.inference.detection_ms} ms`;
     $('depthMs').textContent = data.inference.depth_ms == null ? '--' : `${data.inference.depth_ms} ms`;
+    $('gpuUtil').textContent = data.telemetry.gpu_util_percent == null ? '--' : `${data.telemetry.gpu_util_percent}%`;
+    $('gpuTemp').textContent = data.telemetry.gpu_temp_c == null ? '--' : `${data.telemetry.gpu_temp_c}°C`;
     $('modeBadge').textContent = modes[data.mode] || data.mode;
     $('speech').textContent = data.guidance?.speech || '正在确认环境。';
-    $('guidanceMeta').textContent = `${data.guidance?.action || 'WAIT'} · 风险 ${data.guidance?.priority ?? '--'} · 帧龄 ${data.camera.frame_age_ms ?? '--'} ms · ${data.inference.detector_backend || '检测后端加载中'}`;
-    $('calibrationState').textContent = data.depth.calibrated
-      ? '深度比例已标定；目标距离仍为近似值。'
-      : '未标定时只比较近远；检测目标仍按类别尺寸给出近似米数。';
+    $('guidanceMeta').textContent = `${data.guidance?.action || 'WAIT'} · 风险 ${data.guidance?.priority ?? '--'} · 帧龄 ${data.camera.frame_age_ms ?? '--'} ms`;
+    $('backendMeta').textContent = `检测：${data.inference.detector_backend || '加载中'} · 深度：${data.depth.backend || '加载中'}`;
+    const calibrationMode = data.depth.calibration_mode;
+    $('calibrationState').textContent = calibrationMode === 'user_calibrated'
+      ? '深度比例已用已知距离标定；目标距离仍是近似值。'
+      : calibrationMode?.startsWith('auto_object_anchor')
+        ? `当前使用检测目标作自动测距锚点（${calibrationMode}）；误差约 ±45%。`
+        : '当前只显示近远相对关系；检测目标仍按类别尺寸给出近似米数。';
     renderRegions(data.depth.regions || []);
     renderObjects(data.objects || []);
     document.querySelectorAll('[data-mode]').forEach(button => {

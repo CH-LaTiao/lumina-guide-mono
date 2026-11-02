@@ -79,13 +79,23 @@ def decode(output, transform, threshold=0.35, nms=0.45):
 
 
 class Detector:
-    def __init__(self, model_path: str, threshold=0.35):
+    def __init__(self, model_path: str, engine_path=None, threshold=0.35):
         self.model_path = Path(model_path)
         if not self.model_path.is_file():
             raise FileNotFoundError(f"YOLO model missing: {self.model_path}")
         self.threshold = threshold
         self.session = None
         self.net = None
+        engine = Path(engine_path) if engine_path else None
+        if engine is not None and engine.is_file():
+            try:
+                from tensorrt_session import TensorRTSession
+                self.session = TensorRTSession(engine)
+                self.backend = f"TensorRT {self.session.version} FP16 / CUDA"
+                self.engine_path = str(engine)
+                return
+            except Exception as error:
+                self.engine_error = f"{type(error).__name__}: {error}"
         try:
             import onnxruntime as ort
             options = ort.SessionOptions()

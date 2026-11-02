@@ -24,7 +24,7 @@
     .frame-wrap { position: relative; overflow: hidden; background: #02070d; border-radius: 10px; aspect-ratio: 16/9; }
     .frame { width: 100%; height: 100%; object-fit: contain; display: block; }
     .badge { position: absolute; top: 12px; right: 12px; padding: 6px 10px; border-radius: 8px; background: #08111dd9; font-weight: 700; }
-    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+    .stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 12px; }
     .stat { background: #0a1725; padding: 10px; border-radius: 9px; }
     .stat small { color: var(--muted); display: block; }
     .stat strong { font-size: 17px; }
@@ -67,6 +67,8 @@
       <div class="stat"><small>采集 FPS</small><strong id="fps">0</strong></div>
       <div class="stat"><small>检测</small><strong id="detectMs">--</strong></div>
       <div class="stat"><small>深度</small><strong id="depthMs">--</strong></div>
+      <div class="stat"><small>GPU / CUDA</small><strong id="gpuUtil">--</strong></div>
+      <div class="stat"><small>GPU 温度</small><strong id="gpuTemp">--</strong></div>
     </div>
     <div class="safety">近似距离用于辅助理解。页面不提供安全通行许可，也不能替代白手杖和现场判断。</div>
   </section>
@@ -75,6 +77,7 @@
     <h2>当前提示</h2>
     <div class="speech" id="speech">正在确认环境。</div>
     <div class="meta" id="guidanceMeta">等待感知结果</div>
+    <div class="meta" id="backendMeta">CUDA 后端加载中</div>
     <div class="controls" style="margin-top:14px">
       <button data-mode="standing">站立观察</button>
       <button data-mode="walking" class="active">步行提示</button>

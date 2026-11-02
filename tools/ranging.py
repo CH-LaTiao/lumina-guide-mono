@@ -104,7 +104,7 @@ class DepthCalibration:
             reference_disparity=data.get("reference_disparity"),
         )
 
-    def distances(self, regions):
+    def distances(self, regions, method="calibrated_depth", uncertainty=0.35):
         result = []
         for item in regions:
             raw = item.get("raw_disparity")
@@ -113,15 +113,47 @@ class DepthCalibration:
                                "range_m": None, "method": "uncalibrated_depth"})
                 continue
             distance = self.scale_distance_times_disparity / raw
-            uncertainty = 0.35
             result.append({
                 "region": item["region"],
                 "approx_m": round(distance, 2),
-                "range_m": [round(distance * 0.65, 2), round(distance * 1.35, 2)],
-                "method": "calibrated_depth",
+                "range_m": [
+                    round(distance * (1 - uncertainty), 2),
+                    round(distance * (1 + uncertainty), 2),
+                ],
+                "method": method,
                 "valid": 0.4 <= distance <= 12,
             })
         return result
+
+
+def object_anchor_scale(objects, raw_depth, source_width, source_height):
+    """Infer a per-frame scale from detected objects with valid box distances."""
+    values = []
+    height, width = raw_depth.shape
+    for obj in objects:
+        distance = obj.get("distance", {}).get("approx_m")
+        if distance is None:
+            continue
+        x1, y1, x2, y2 = obj["bbox"]
+        sx1 = max(0, min(width - 1, round(x1 * width / source_width)))
+        sx2 = max(sx1 + 1, min(width, round(x2 * width / source_width)))
+        sy1 = max(0, min(height - 1, round(y1 * height / source_height)))
+        sy2 = max(sy1 + 1, min(height, round(y2 * height / source_height)))
+        cx, cy = (sx1 + sx2) // 2, (sy1 + sy2) // 2
+        rx, ry = max(2, (sx2 - sx1) // 8), max(2, (sy2 - sy1) // 8)
+        patch = raw_depth[
+            max(0, cy - ry):min(height, cy + ry + 1),
+            max(0, cx - rx):min(width, cx + rx + 1),
+        ]
+        finite = patch[np.isfinite(patch) & (patch > 1e-6)]
+        if finite.size < 4:
+            continue
+        disparity = float(np.median(finite))
+        if disparity > 0:
+            values.append(float(distance) * disparity)
+    if not values:
+        return None, 0
+    return float(np.median(values)), len(values)
 
 
 def calibrate(depth_raw, distance_m, output_path):

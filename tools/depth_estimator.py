@@ -17,6 +17,16 @@ def blob_from_image(image, size=256):
     return np.ascontiguousarray(normalized.transpose(2, 0, 1)[None])
 
 
+def blob_from_dav2(image, size=518):
+    """Depth Anything V2 preprocessing used by the validated TensorRT engine."""
+    resized = cv2.resize(image, (size, size), interpolation=cv2.INTER_CUBIC)
+    rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+    mean = np.array((0.485, 0.456, 0.406), np.float32)
+    std = np.array((0.229, 0.224, 0.225), np.float32)
+    normalized = (rgb - mean) / std
+    return np.ascontiguousarray(normalized.transpose(2, 0, 1)[None])
+
+
 def normalize_inverse_depth(output):
     raw = np.asarray(output, np.float32).squeeze()
     if raw.ndim != 2 or raw.size == 0 or not np.isfinite(raw).all():
@@ -63,21 +73,43 @@ def colorize(raw):
 
 
 class DepthEstimator:
-    def __init__(self, model_path: str):
+    def __init__(self, model_path: str, engine_path=None):
         self.model_path = Path(model_path)
         if not self.model_path.is_file():
             raise FileNotFoundError(f"Depth model missing: {self.model_path}")
+        self.session = None
+        self.net = None
+        engine = Path(engine_path) if engine_path else None
+        if engine is not None and engine.is_file():
+            try:
+                from tensorrt_session import TensorRTSession
+                self.session = TensorRTSession(engine)
+                self.model_size = int(self.session.input_shape[-1])
+                self.model = "Depth Anything V2 Small"
+                self.backend = (
+                    f"Depth Anything V2 Small / TensorRT "
+                    f"{self.session.version} FP16 / CUDA"
+                )
+                self.engine_path = str(engine)
+                return
+            except Exception as error:
+                self.engine_error = f"{type(error).__name__}: {error}"
         self.net = cv2.dnn.readNetFromONNX(str(self.model_path))
+        self.model = "MiDaS Small v2.1"
         self.backend = "MiDaS Small / OpenCV DNN CPU"
 
     def infer(self, image):
         started = time.monotonic()
-        self.net.setInput(blob_from_image(image))
-        raw, normalized = normalize_inverse_depth(self.net.forward())
+        if self.session is not None:
+            output = self.session.run(blob_from_dav2(image, self.model_size))
+        else:
+            self.net.setInput(blob_from_image(image))
+            output = self.net.forward()
+        raw, normalized = normalize_inverse_depth(output)
         regions = region_statistics(raw)
         return {
             "state": "READY",
-            "model": "MiDaS Small v2.1",
+            "model": self.model,
             "backend": self.backend,
             "raw": raw,
             "normalized": normalized,

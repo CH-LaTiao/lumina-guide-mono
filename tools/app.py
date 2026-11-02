@@ -18,8 +18,9 @@ from camera import CameraCapture, CameraConfig
 from depth_estimator import DepthEstimator, colorize
 from detector import Detector
 from guidance import advise, draw_depth_strips
-from ranging import DepthCalibration, annotate_objects, calibrate
+from ranging import DepthCalibration, annotate_objects, calibrate, object_anchor_scale
 from text_render import render_overlays
+from telemetry import TelemetryMonitor
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,6 +30,7 @@ class AppState:
         self.lock = threading.RLock()
         self.camera = None
         self.camera_source = None
+        self.telemetry_source = None
         self.raw = None
         self.annotated_jpeg = None
         self.depth_jpeg = None
@@ -79,6 +81,10 @@ class AppState:
                 for region in self.depth.get("regions", [])
             ]
             guidance = self.guidance
+            telemetry = (
+                self.telemetry_source.read()
+                if self.telemetry_source is not None else {"state": "STARTING"}
+            )
             annotated = self.annotated_jpeg
             annotated_at = inference.get("last_cycle")
         if annotated is not None and annotated_at is not None:
@@ -97,8 +103,15 @@ class AppState:
                 "backend": self.depth.get("backend"),
                 "regions": regions,
                 "calibrated": self.calibration.scale_distance_times_disparity is not None,
+                "calibration_mode": self.depth.get(
+                    "calibration_mode",
+                    "user_calibrated"
+                    if self.calibration.scale_distance_times_disparity is not None
+                    else "relative_only",
+                ),
             },
             "guidance": guidance,
+            "telemetry": telemetry,
             "real_output": False,
             "movement_allowed": False,
             "limitations": [
@@ -162,7 +175,28 @@ class InferenceRunner:
                 objects, detection_ms = self.detector.infer(frame)
                 objects = annotate_objects(objects, width, height, self.fov)
                 depth = self.depth_estimator.infer(frame)
-                depth_ranges = self.state.calibration.distances(depth["regions"])
+                if self.state.calibration.scale_distance_times_disparity is not None:
+                    depth_ranges = self.state.calibration.distances(
+                        depth["regions"], method="user_calibrated_depth",
+                        uncertainty=0.30,
+                    )
+                    calibration_mode = "user_calibrated"
+                else:
+                    scale, anchor_count = object_anchor_scale(
+                        objects, depth["raw"], width, height
+                    )
+                    depth_ranges = (
+                        DepthCalibration(scale).distances(
+                            depth["regions"], method="auto_object_anchor_depth",
+                            uncertainty=0.45,
+                        )
+                        if scale is not None
+                        else self.state.calibration.distances(depth["regions"])
+                    )
+                    calibration_mode = (
+                        f"auto_object_anchor({anchor_count})"
+                        if scale is not None else "relative_only"
+                    )
                 ranges_by_region = {
                     item["region"]: item for item in depth_ranges
                 }
@@ -196,6 +230,7 @@ class InferenceRunner:
                         key: value for key, value in depth.items() if key not in ("raw", "normalized")
                     }
                     self.state.depth["raw"] = depth["raw"]
+                    self.state.depth["calibration_mode"] = calibration_mode
                     self.state.guidance = guided
                     self.state.annotated_jpeg = jpeg.tobytes()
                     self.state.depth_jpeg = depth_jpeg
@@ -338,6 +373,8 @@ def main(argv=None):
                         default=float(os.environ.get("CAMERA_HFOV_DEG", "68")))
     parser.add_argument("--yolo", required=True)
     parser.add_argument("--depth-model", required=True)
+    parser.add_argument("--detector-engine")
+    parser.add_argument("--depth-engine")
     parser.add_argument("--runtime", type=Path,
                         default=ROOT / "runtime")
     args = parser.parse_args(argv)
@@ -346,8 +383,10 @@ def main(argv=None):
     state = AppState(calibration_path)
     camera = CameraCapture(CameraConfig(args.camera, args.width, args.height, args.fps))
     state.camera_source = camera
-    detector = Detector(args.yolo)
-    depth_estimator = DepthEstimator(args.depth_model)
+    detector = Detector(args.yolo, args.detector_engine)
+    depth_estimator = DepthEstimator(args.depth_model, args.depth_engine)
+    telemetry = TelemetryMonitor()
+    state.telemetry_source = telemetry
     inference = InferenceRunner(state, camera, detector, depth_estimator, args.fov)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
@@ -361,6 +400,7 @@ def main(argv=None):
     signal.signal(signal.SIGTERM, shutdown)
     camera.start()
     inference.start()
+    telemetry.start()
     print(
         f"LUMINA Mono ready: http://{args.host}:{args.port}/",
         flush=True,
@@ -369,6 +409,7 @@ def main(argv=None):
         server.serve_forever(poll_interval=0.25)
     finally:
         inference.stop()
+        telemetry.stop()
         camera.stop()
         server.server_close()
 

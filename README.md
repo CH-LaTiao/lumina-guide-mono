@@ -5,7 +5,8 @@
 
 LUMINA Guide Mono 是 [LUMINA Guide](https://github.com/CH-LaTiao/lumina-guide)
 的独立单目分支。它使用一台普通 UVC 摄像头、NVIDIA Jetson Nano、YOLO11n 与
-MiDaS Small，在同一页面展示实时画面、检测框、单目深度、近似距离和建议提示。
+Depth Anything V2 Small，在同一页面展示实时画面、检测框、单目深度、近似距离、
+GPU 状态和建议提示。
 
 > 这是工程验证原型。近似距离不是安全级测距，系统不能替代白手杖、导盲犬、
 > 陪同人员或交通判断。默认 `movement_allowed=false`。
@@ -14,7 +15,7 @@ MiDaS Small，在同一页面展示实时画面、检测框、单目深度、近
 
 - MJPG/UVC 摄像头采集，支持自动重连、最新帧覆盖和 1–30 FPS 可观测状态。
 - YOLO11n ONNX 目标检测；框内显示类别、置信度、近似距离和误差范围。
-- MiDaS Small ONNX 单目相对深度；在未标定时显示“近／中／远”而非伪造精确米数。
+- Depth Anything V2 Small TensorRT 单目相对深度；支持已知距离标定和目标动态锚定。
 - 检测物体使用目标框高度和分类尺寸先验估算米数；镜像、裁切或边界不完整的目标
   会拒绝测距。
 - 用户可用已知距离完成单目深度标定；标定后输出连续近似距离与误差范围。
@@ -30,7 +31,7 @@ UVC Camera
   -> inference worker
        -> YOLO11n ONNX
        -> class-prior distance
-       -> MiDaS Small ONNX
+       -> Depth Anything V2 Small TensorRT/CUDA
        -> relative depth / calibrated distance
   -> deterministic guidance
   -> dashboard, JPEG stream and JSON status
@@ -45,7 +46,7 @@ UVC Camera
 
 1. **目标先验测距**：`距离 ≈ 实际高度 × 焦距 / 目标框像素高度`。类别高度来自
    通用尺寸表，结果附带较宽误差范围，并标记为 `class_prior`。
-2. **单目深度测距**：MiDaS 输出稠密相对逆深度；使用已知距离标定得到比例，
+2. **单目深度测距**：Depth Anything V2 输出稠密相对逆深度；使用已知距离标定，
    再按 `距离 ≈ 标定值 / 相对逆深度` 计算。未标定时只显示近远排序。
 
 玻璃、镜面、纯色墙面、细杆、地面纹理、镜头俯仰及人物姿态都会影响单目测距。
@@ -60,6 +61,16 @@ cd ~/lumina-guide-mono
 ```
 
 浏览器打开 `http://<JETSON_IP>:8766/`。页面无需访问码，但默认只适合可信局域网。
+
+若以下两个同版本 TensorRT 引擎存在，启动器会自动优先使用 CUDA：
+
+```text
+models/yolo11n_640_fp16.engine
+models/dav2s_518_fp16.engine
+```
+
+浏览器顶部会显示实际检测后端、深度后端、GPU 利用率、GPU 温度和物理内存。
+缺少引擎时才回退到 ONNX Runtime 或 OpenCV CPU。
 
 ### 安装为自动恢复服务
 
@@ -81,8 +92,8 @@ journalctl -u lumina-guide-mono.service -f
 
 摄像头设备、分辨率、模型路径和水平视场角可通过参数或环境变量调整：
 
-首次安装可创建隔离环境。Jetson 的检测使用 ONNX Runtime CPU；这是为了兼容
-OpenCV 4.8 无法解析的动态 YOLO11 图。请保持 `numpy<2` 以匹配系统 OpenCV ABI。
+首次安装可创建隔离环境。请保持 `numpy<2` 以匹配系统 OpenCV ABI。TensorRT
+引擎由同版本 JetPack/TensorRT 在目标 GPU 上生成；模型编译失败时仍可回退 CPU。
 
 ```bash
 sudo apt install python3.10-venv
@@ -93,6 +104,7 @@ python3 -m venv --system-site-packages .venv
 ```bash
 CAMERA_DEVICE=0 CAMERA_WIDTH=1280 CAMERA_HEIGHT=720 \
 YOLO_MODEL=models/yolo11n.onnx DEPTH_MODEL=models/midas-small.onnx \
+CUDA_VISIBLE_DEVICES=0 \
 CAMERA_HFOV_DEG=68 ./run.sh --host 0.0.0.0 --port 8766
 ```
 

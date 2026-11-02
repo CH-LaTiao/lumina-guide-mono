@@ -1,10 +1,13 @@
 # Models
 
-Models are never committed. Download them from their upstream releases:
+Models and engines are never committed. Prepare these files locally:
 
-- YOLO11n ONNX, COCO object detection.
-- MiDaS Small ONNX v2.1, relative monocular depth.
+- `yolo11n_640_fp16.engine`: YOLO11n COCO detection, TensorRT/CUDA.
+- `dav2s_518_fp16.engine`: Depth Anything V2 Small, TensorRT/CUDA.
+- `yolo11n.onnx`: portable CPU detection fallback.
+- `midas-small.onnx`: portable CPU depth fallback.
 
-Run `../scripts/download_models.sh`. Review each upstream model licence before
-redistribution or commercial deployment.
+Run `../scripts/download_models.sh` for the ONNX fallbacks. TensorRT engines must
+be built on a compatible Jetson GPU and TensorRT version. Review each upstream
+model licence before redistribution or commercial deployment.
 

@@ -8,7 +8,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from ranging import (DepthCalibration, calibrate, estimate_object_distance,
-                     focal_pixels)
+                     focal_pixels, object_anchor_scale)
 
 
 class RangingTests(unittest.TestCase):
@@ -57,6 +57,24 @@ class RangingTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             focal_pixels(1280, 200)
+
+    def test_detected_object_becomes_a_monocular_depth_scale_anchor(self):
+        raw = np.full((518, 518), 100.0, np.float32)
+        objects = [{
+            "label": "person",
+            "bbox": [500, 100, 780, 620],
+            "distance": {"approx_m": 2.5, "confidence": "medium"},
+        }]
+        scale, count = object_anchor_scale(objects, raw, 1280, 720)
+        self.assertEqual(count, 1)
+        self.assertAlmostEqual(scale, 250.0)
+        result = DepthCalibration(scale).distances(
+            [{"region": "CENTER", "raw_disparity": 50.0}],
+            method="auto_object_anchor_depth",
+            uncertainty=.45,
+        )[0]
+        self.assertAlmostEqual(result["approx_m"], 5.0)
+        self.assertEqual(result["method"], "auto_object_anchor_depth")
 
 
 if __name__ == "__main__":
